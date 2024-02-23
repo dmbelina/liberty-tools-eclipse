@@ -89,6 +89,7 @@ public class Messages extends NLS {
     /** CommandBuilder */
     public static String maven_exec_not_found;
     public static String gradle_exec_not_found;
+    public static String wrapper_not_generated;
 
     /** Project */
     public static String determine_java_project_error;

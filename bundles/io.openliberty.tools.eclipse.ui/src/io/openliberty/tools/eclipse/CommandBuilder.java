@@ -15,6 +15,12 @@ package io.openliberty.tools.eclipse;
 import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
+
+import org.apache.maven.execution.MavenExecutionResult;
+import org.eclipse.core.runtime.CoreException;
+import org.eclipse.m2e.core.MavenPlugin;
+import org.eclipse.m2e.core.embedder.IMavenExecutionContext;
 import org.eclipse.osgi.util.NLS;
 
 import io.openliberty.tools.eclipse.logging.Trace;
@@ -29,6 +35,8 @@ public class CommandBuilder {
     private String pathEnv;
 
     private boolean isMaven;
+    
+
 
     /**
      * @param pathEnv
@@ -39,6 +47,7 @@ public class CommandBuilder {
         this.projectPath = projectPath;
         this.pathEnv = pathEnv;
         this.isMaven = isMaven;
+
     }
 
     /**
@@ -53,7 +62,7 @@ public class CommandBuilder {
      * @throws CommandNotFoundException
      */
     public static String getMavenCommandLine(String projectPath, String cmdArgs, String pathEnv, boolean printCmd)
-            throws CommandBuilder.CommandNotFoundException {
+            throws CommandBuilder.CommandNotFoundException {	
         if (Trace.isEnabled()) {
             Trace.getTracer().traceEntry(Trace.TRACE_TOOLS, new Object[] { projectPath, cmdArgs });
         }
@@ -79,8 +88,48 @@ public class CommandBuilder {
         }
         return cmdLine;
     }
-
-    private String getCommand() throws CommandBuilder.CommandNotFoundException {
+    
+    private void generateMvnWrapper() {
+    		 
+    	IMavenExecutionContext ec = MavenPlugin.getMaven().createExecutionContext();  
+    	MavenExecutionResult result = null;
+    	
+		try {
+			ec.getExecutionRequest().getGoals().add("wrapper:wrapper");
+			ec.getExecutionRequest().setBaseDirectory(new File(projectPath));
+			ec.getExecutionRequest().setPom(new File(projectPath + File.separator + "pom.xml"));
+			
+			result = ec.execute(ec.getExecutionRequest());
+		} catch (CoreException e) {
+			 //log exception instead? re-throw?
+			
+			 if (Trace.isEnabled()) {
+	                Trace.getTracer().trace(Trace.TRACE_TOOLS,e.getMessage());
+	         }
+		}
+		
+		List<Throwable> exceptions = result.getExceptions();
+		
+		if(result != null && !exceptions.isEmpty()) {
+			String errorMsg = "Could not generate mvn wrapper for project";
+			
+			 ErrorHandler.processErrorMessage(NLS.bind(Messages.wrapper_not_generated, new String[] {projectPath}), false);
+			 
+			 
+			 if (Trace.isEnabled()) {
+	                Trace.getTracer().trace(Trace.TRACE_TOOLS, errorMsg);
+	         }
+			 for(Throwable exception: exceptions) {
+				 if (Trace.isEnabled()) {
+		                Trace.getTracer().trace(Trace.TRACE_TOOLS,exception.getMessage());
+		         }
+			 }
+		}
+    }
+    
+    
+    private String getCommand() throws CommandBuilder.CommandNotFoundException  {
+    	
         String cmd = getCommandFromWrapper();
         if (cmd == null) {
             cmd = getCommandFromPreferences();
@@ -92,6 +141,12 @@ public class CommandBuilder {
         if (Trace.isEnabled()) {
             Trace.getTracer().trace(Trace.TRACE_TOOLS, "Command = " + cmd);
         }
+        
+	    if(cmd == null) {
+	        //If no wrapper already, or no command from preferences/pathenv try to generate a wrapper
+	        generateMvnWrapper();
+	        cmd = getCommandFromWrapper();
+	    }
 
         if (cmd == null) {
 
